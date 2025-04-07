@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Video Call with Screen Sharing</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #1a2327, #2a3d4f);
+      color: #e0e7f1;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #container {
+      display: flex;
+      height: calc(100% - 60px);
+      transition: all 0.3s ease;
+    }
+
+    #video-grid {
+      flex: 1;
+      display: flex;
+      padding: 20px;
+      overflow-y: auto;
+      background: rgba(26, 35, 39, 0.8);
+      border-radius: 10px;
+      backdrop-filter: blur(5px);
+      transition: flex 0.3s ease;
+    }
+
+    .user-panel {
+      position: relative;
+      background: #1e2a30;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .user-panel:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .user-panel video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 0.3s ease;
+    }
+
+    .label {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #d1dbe5;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      transition: opacity 0.3s ease;
+    }
+
+    #screen-share {
+      position: relative;
+      background: #1e2a30;
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #screen-share:hover {
+      transform: scale(1.02);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    #screen-share video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    #screen-share .label {
+      bottom: 12px;
+      font-size: 16px;
+      padding: 6px 12px;
+    }
+
+    #chat-panel {
+      flex: 0;
+      background: #1e2a30;
+      border-left: 1px solid #3a5063;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      transition: flex 0.3s ease;
+      max-width: 300px;
+    }
+
+    #chat-panel.hidden {
+      flex: 0;
+      max-width: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: rgba(30, 42, 48, 0.9);
+      border-radius: 8px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .chat-message {
+      background: #2e3f4a;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #e0e7f1;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: background 0.2s ease;
+    }
+
+    .chat-message:hover {
+      background: #3a5063;
+    }
+
+    #chat-input {
+      display: flex;
+      gap: 10px;
+    }
+
+    #chat-input input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #3a5063;
+      border-radius: 6px;
+      background: #2e3f4a;
+      color: #e0e7f1;
+      font-size: 14px;
+      transition: border-color 0.3s ease;
+    }
+
+    #chat-input input:focus {
+      border-color: #4285f4;
+      outline: none;
+    }
+
+    #chat-input button {
+      padding: 10px 15px;
+      background: linear-gradient(90deg, #4285f4, #3c9eff);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    #chat-input button:hover {
+      background: linear-gradient(90deg, #3c9eff, #4285f4);
+      transform: translateY(-2px);
+    }
+
+    #controls {
+      background: #1e2a30;
+      padding: 15px;
+      border-top: 1px solid #3a5063;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
+      transition: background 0.3s ease;
+    }
+
+    .control-btn {
+      background: linear-gradient(135deg, #2e3f4a, #3a5063);
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #e0e7f1;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+    }
+
+    .control-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+      background: linear-gradient(135deg, #3a5063, #2e3f4a);
+    }
+
+    #leave-btn {
+      background: linear-gradient(135deg, #d93025, #e74c3c);
+    }
+
+    #leave-btn:hover {
+      background: linear-gradient(135deg, #e74c3c, #d93025);
+    }
+
+    /* Adaptive Layout */
+    @media (min-width: 600px) {
+      #video-grid.two-users {
+        flex-direction: row;
+      }
+      #video-grid.two-users .user-panel {
+        flex: 1;
+        height: calc(100vh - 100px);
+      }
+
+      #video-grid.three-users {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+      }
+      #video-grid.three-users .user-panel {
+        height: 300px;
+      }
+
+      #video-grid.four-plus-users {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+      }
+      #video-grid.four-plus-users .user-panel {
+        height: 225px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="video-grid">
+      <div class="user-panel" id="localPanel">
+        <video id="localVideo" autoplay muted></video>
+        <div class="label" id="localLabel"></div>
+      </div>
+      <div id="screen-share">
+        <video id="localScreen" autoplay></video>
+        <div class="label">Screen</div>
+      </div>
+    </div>
+    <div id="chat-panel">
+      <div id="chat-messages"></div>
+      <div id="chat-input">
+        <input type="text" id="chat-message" placeholder="Type a message..." />
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+  <div id="controls">
+    <button class="control-btn" onclick="toggleVideo()" title="Toggle Video">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M4 8v8h12l4 4V4l-4 4H4zm2 0h8v2H6V8zm0 4h8v2H6v-2zm0 4h6v2H6v-2z"/>
+      </svg>
+    </button>
+    <button class="control-btn" onclick="toggleAudio()" title="Toggle Audio">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+      </svg>
+    </button>
+    <button class="control-btn" onclick="shareScreen()" title="Share Screen">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+      </svg>
+    </button>
+    <button class="control-btn" id="leave-btn" onclick="leaveCall()" title="Leave Call">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M10 9V5l-7 7 7 7v-4h7V9H10zm2-7v2h9v16h-9v2h11V2H12z"/>
+      </svg>
+    </button>
+    <button class="control-btn" onclick="toggleChat()" title="Toggle Chat">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+      </svg>
+    </button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const localVideo = document.getElementById('localVideo');
+    const localLabel = document.getElementById('localLabel');
+    const videoGrid = document.getElementById('video-grid');
+    const screenShare = document.getElementById('screen-share');
+    const localScreen = document.getElementById('localScreen');
+    const chatPanel = document.getElementById('chat-panel');
+    const chatMessages = document.getElementById('chat-messages');
+    let localStream, screenStream, participantCount = 1;
+    const peers = new Map();
+    const userPanels = new Map(); // socket_id -> { panel, cameraVideo, screenVideo, isSharing }
+
+    async function startMedia() {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = localStream;
+    }
+
+    async function joinCall() {
+      const user_id = prompt('Enter your name:') || 'User';
+      const session_id = prompt('Enter session ID:') || 'default';
+      localLabel.textContent = user_id;
+      await startMedia();
+      socket.emit('join', { user_id, session_id });
+    }
+
+    function createPeerConnection(socket_id, user_id) {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      // Add local streams
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      if (screenStream) screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+
+      pc.ontrack = (event) => {
+        const stream = event.streams[0];
+        const track = event.track;
+        let panelData = userPanels.get(socket_id);
+        if (!panelData) {
+          const panel = createUserPanel(socket_id, user_id);
+          panelData = { panel, cameraVideo: null, screenVideo: null, isSharing: false };
+          userPanels.set(socket_id, panelData);
+          participantCount++;
+          updateLayout();
+        }
+
+        if (track.kind === 'video') {
+          // Ensure camera stream is set first
+          if (!panelData.cameraVideo) {
+            panelData.cameraVideo = document.createElement('video');
+            panelData.cameraVideo.id = `camera_${socket_id}`;
+            panelData.cameraVideo.autoplay = true;
+            panelData.panel.appendChild(panelData.cameraVideo);
+            pc.cameraStream = stream; // Set camera stream
+            panelData.cameraVideo.srcObject = stream; // Assign camera stream
+          }
+          // Handle screen stream only if sharing
+          if (stream !== pc.cameraStream && !panelData.screenVideo && panelData.isSharing) {
+            panelData.screenVideo = document.createElement('video');
+            panelData.screenVideo.id = `screen_${socket_id}`;
+            panelData.screenVideo.autoplay = true;
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = 'Screen';
+            panelData.panel.appendChild(label);
+            panelData.panel.appendChild(panelData.screenVideo);
+            panelData.screenVideo.srcObject = stream; // Assign screen stream
+          }
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice_candidate', { candidate: event.candidate, to: socket_id });
+        }
+      };
+
+      peers.set(socket_id, pc);
+      return pc;
+    }
+
+    function createUserPanel(socket_id, user_id) {
+      const panel = document.createElement('div');
+      panel.className = 'user-panel';
+      panel.id = `panel_${socket_id}`;
+      const nameLabel = document.createElement('div');
+      nameLabel.className = 'label';
+      nameLabel.textContent = user_id;
+      panel.appendChild(nameLabel);
+      videoGrid.appendChild(panel);
+      return panel;
+    }
+
+    function updateLayout() {
+      videoGrid.className = 'video-grid';
+      if (participantCount === 2) {
+        videoGrid.classList.add('two-users');
+      } else if (participantCount === 3) {
+        videoGrid.classList.add('three-users');
+      } else if (participantCount >= 4) {
+        videoGrid.classList.add('four-plus-users');
+      }
+    }
+
+    socket.on('user_joined', async ({ user_id, socket_id }) => {
+      if (socket_id === socket.id) return;
+      const pc = createPeerConnection(socket_id, user_id);
+      pc.user_id = user_id;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { offer, to: socket_id });
+    });
+
+    socket.on('offer', async ({ offer, from }) => {
+      const pc = createPeerConnection(from, peers.get(from)?.user_id || `User_${from}`);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('answer', { answer, to: from });
+    });
+
+    socket.on('answer', ({ answer, from }) => {
+      const pc = peers.get(from);
+      pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on('ice_candidate', ({ candidate, from }) => {
+      const pc = peers.get(from);
+      pc.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+
+    socket.on('user_left', ({ socket_id }) => {
+      const pc = peers.get(socket_id);
+      if (pc) {
+        pc.close();
+        peers.delete(socket_id);
+        const panelData = userPanels.get(socket_id);
+        if (panelData) {
+          panelData.panel.remove();
+          userPanels.delete(socket_id);
+          participantCount--;
+          updateLayout();
+        }
+      }
+    });
+
+    socket.on('screen_sharing', ({ socket_id, isSharing, user_id }) => {
+      const panelData = userPanels.get(socket_id);
+      if (socket_id === socket.id) {
+        screenShare.style.display = isSharing ? 'block' : 'none';
+        if (isSharing && screenStream) {
+          localScreen.srcObject = screenStream;
+        } else {
+          localScreen.srcObject = null;
+        }
+      } else if (panelData) {
+        panelData.isSharing = isSharing;
+        if (isSharing && !panelData.screenVideo) {
+          // Add screen video only if not already present
+          panelData.screenVideo = document.createElement('video');
+          panelData.screenVideo.id = `screen_${socket_id}`;
+          panelData.screenVideo.autoplay = true;
+          const label = document.createElement('div');
+          label.className = 'label';
+          label.textContent = 'Screen';
+          panelData.panel.appendChild(label);
+          panelData.panel.appendChild(panelData.screenVideo);
+          // Re-trigger ontrack to ensure screen stream is assigned
+          peers.get(socket_id).getReceivers().forEach(receiver => {
+            if (receiver.track.kind === 'video' && receiver.track !== pc.cameraStream?.getVideoTracks()[0]) {
+              panelData.screenVideo.srcObject = new MediaStream([receiver.track]);
+            }
+          });
+        } else if (!isSharing && panelData.screenVideo) {
+          const label = panelData.screenVideo.previousElementSibling;
+          if (label && label.textContent === 'Screen') label.remove();
+          panelData.screenVideo.remove();
+          panelData.screenVideo = null;
+        }
+      }
+    });
+
+    socket.on('chat_message', ({ user_id, message, timestamp }) => {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'chat-message';
+      msgDiv.innerHTML = `<strong>${user_id}</strong> (${timestamp}): ${message}`;
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+
+    function toggleVideo() {
+      const enabled = localStream.getVideoTracks()[0].enabled;
+      localStream.getVideoTracks()[0].enabled = !enabled;
+    }
+
+    function toggleAudio() {
+      const enabled = localStream.getAudioTracks()[0].enabled;
+      localStream.getAudioTracks()[0].enabled = !enabled;
+    }
+
+    async function shareScreen() {
+      if (!screenStream) {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        localScreen.srcObject = screenStream;
+        screenShare.style.display = 'block';
+        screenStream.getVideoTracks()[0].onended = () => {
+          screenStream = null;
+          socket.emit('screen_sharing', { isSharing: false });
+          screenShare.style.display = 'none';
+          localScreen.srcObject = null;
+          peers.forEach(pc => pc.getSenders().forEach(sender => {
+            if (sender.track && sender.track.kind === 'video' && !localStream.getVideoTracks().includes(sender.track)) {
+              pc.removeTrack(sender);
+            }
+          }));
+        };
+        socket.emit('screen_sharing', { isSharing: true });
+        peers.forEach(pc => screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream)));
+      }
+    }
+
+    function sendMessage() {
+      const message = document.getElementById('chat-message').value.trim();
+      if (message) {
+        socket.emit('chat_message', { message });
+        document.getElementById('chat-message').value = '';
+      }
+    }
+
+    function toggleChat() {
+      chatPanel.classList.toggle('hidden');
+      if (!chatPanel.classList.contains('hidden')) {
+        videoGrid.style.flex = '3';
+      } else {
+        videoGrid.style.flex = '1';
+      }
+    }
+
+    function leaveCall() {
+      localStream.getTracks().forEach(track => track.stop());
+      if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+      peers.forEach(pc => pc.close());
+      peers.clear();
+      userPanels.forEach(data => data.panel.remove());
+      userPanels.clear();
+      socket.disconnect();
+      window.location.reload();
+    }
+
+    window.onload = joinCall;
+  </script>
+</body>
+</html>
