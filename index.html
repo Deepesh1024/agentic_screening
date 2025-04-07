@@ -23,27 +23,30 @@
 
     #video-grid {
       flex: 1;
-      display: flex;
-      padding: 20px;
+      display: grid;
+      padding: 5px;
       overflow-y: auto;
       background: rgba(26, 35, 39, 0.8);
       border-radius: 10px;
       backdrop-filter: blur(5px);
       transition: flex 0.3s ease;
+      gap: 5px;
     }
 
     .user-panel {
       position: relative;
       background: #1e2a30;
-      border-radius: 12px;
+      border-radius: 6px;
       overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      width: 100%;
+      height: 100%;
     }
 
     .user-panel:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     .user-panel video {
@@ -55,43 +58,16 @@
 
     .label {
       position: absolute;
-      bottom: 8px;
-      left: 8px;
+      bottom: 5px;
+      left: 5px;
       background: rgba(0, 0, 0, 0.6);
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 14px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 12px;
       font-weight: 500;
       color: #d1dbe5;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
       transition: opacity 0.3s ease;
-    }
-
-    #screen-share {
-      position: relative;
-      background: #1e2a30;
-      border-radius: 12px;
-      overflow: hidden;
-      display: none;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    #screen-share:hover {
-      transform: scale(1.02);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-    }
-
-    #screen-share video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    #screen-share .label {
-      bottom: 12px;
-      font-size: 16px;
-      padding: 6px 12px;
     }
 
     #chat-panel {
@@ -214,49 +190,11 @@
     #leave-btn:hover {
       background: linear-gradient(135deg, #e74c3c, #d93025);
     }
-
-    /* Adaptive Layout */
-    @media (min-width: 600px) {
-      #video-grid.two-users {
-        flex-direction: row;
-      }
-      #video-grid.two-users .user-panel {
-        flex: 1;
-        height: calc(100vh - 100px);
-      }
-
-      #video-grid.three-users {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        grid-template-rows: repeat(2, 1fr);
-      }
-      #video-grid.three-users .user-panel {
-        height: 300px;
-      }
-
-      #video-grid.four-plus-users {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        grid-template-rows: repeat(2, 1fr);
-      }
-      #video-grid.four-plus-users .user-panel {
-        height: 225px;
-      }
-    }
   </style>
 </head>
 <body>
   <div id="container">
-    <div id="video-grid">
-      <div class="user-panel" id="localPanel">
-        <video id="localVideo" autoplay muted></video>
-        <div class="label" id="localLabel"></div>
-      </div>
-      <div id="screen-share">
-        <video id="localScreen" autoplay></video>
-        <div class="label">Screen</div>
-      </div>
-    </div>
+    <div id="video-grid"></div>
     <div id="chat-panel">
       <div id="chat-messages"></div>
       <div id="chat-input">
@@ -292,88 +230,44 @@
       </svg>
     </button>
   </div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    const localVideo = document.getElementById('localVideo');
-    const localLabel = document.getElementById('localLabel');
     const videoGrid = document.getElementById('video-grid');
-    const screenShare = document.getElementById('screen-share');
-    const localScreen = document.getElementById('localScreen');
     const chatPanel = document.getElementById('chat-panel');
     const chatMessages = document.getElementById('chat-messages');
-    let localStream, screenStream, participantCount = 1;
-    const peers = new Map();
-    const userPanels = new Map(); // socket_id -> { panel, cameraVideo, screenVideo, isSharing }
+    let localStream, screenStream, participantCount = 0;
+    const peers = new Map(); // socket_id -> RTCPeerConnection
+    const userPanels = new Map(); // socket_id -> { panel, cameraVideo, screenVideo, isSharing, user_id }
 
     async function startMedia() {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localVideo.srcObject = localStream;
-    }
-
-    async function joinCall() {
       const user_id = prompt('Enter your name:') || 'User';
-      const session_id = prompt('Enter session ID:') || 'default';
-      localLabel.textContent = user_id;
-      await startMedia();
+      const localPanel = createUserPanel(socket.id, user_id);
+      const localVideo = document.createElement('video');
+      localVideo.id = `camera_${socket.id}`;
+      localVideo.autoplay = true;
+      localVideo.muted = true;
+      localVideo.setAttribute('playsinline', '');
+      localPanel.appendChild(localVideo);
+      localVideo.srcObject = localStream;
+      userPanels.set(socket.id, { panel: localPanel, cameraVideo: localVideo, screenVideo: null, isSharing: false, user_id });
+      participantCount++;
+      updateGridLayout();
+      const session_id = prompt('Enter session_id:') || 'default';
       socket.emit('join', { user_id, session_id });
     }
 
-    function createPeerConnection(socket_id, user_id) {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    function updateGridLayout() {
+      const totalPanels = participantCount;
+      const columns = Math.min(totalPanels, 2);
+      const rows = Math.ceil(totalPanels / 2);
+      videoGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+      videoGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      document.querySelectorAll('.user-panel').forEach(panel => {
+        panel.style.width = '100%';
+        panel.style.height = '100%';
       });
-
-      // Add local streams
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      if (screenStream) screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
-
-      pc.ontrack = (event) => {
-        const stream = event.streams[0];
-        const track = event.track;
-        let panelData = userPanels.get(socket_id);
-        if (!panelData) {
-          const panel = createUserPanel(socket_id, user_id);
-          panelData = { panel, cameraVideo: null, screenVideo: null, isSharing: false };
-          userPanels.set(socket_id, panelData);
-          participantCount++;
-          updateLayout();
-        }
-
-        if (track.kind === 'video') {
-          // Ensure camera stream is set first
-          if (!panelData.cameraVideo) {
-            panelData.cameraVideo = document.createElement('video');
-            panelData.cameraVideo.id = `camera_${socket_id}`;
-            panelData.cameraVideo.autoplay = true;
-            panelData.panel.appendChild(panelData.cameraVideo);
-            pc.cameraStream = stream; // Set camera stream
-            panelData.cameraVideo.srcObject = stream; // Assign camera stream
-          }
-          // Handle screen stream only if sharing
-          if (stream !== pc.cameraStream && !panelData.screenVideo && panelData.isSharing) {
-            panelData.screenVideo = document.createElement('video');
-            panelData.screenVideo.id = `screen_${socket_id}`;
-            panelData.screenVideo.autoplay = true;
-            const label = document.createElement('div');
-            label.className = 'label';
-            label.textContent = 'Screen';
-            panelData.panel.appendChild(label);
-            panelData.panel.appendChild(panelData.screenVideo);
-            panelData.screenVideo.srcObject = stream; // Assign screen stream
-          }
-        }
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('ice_candidate', { candidate: event.candidate, to: socket_id });
-        }
-      };
-
-      peers.set(socket_id, pc);
-      return pc;
     }
 
     function createUserPanel(socket_id, user_id) {
@@ -388,19 +282,102 @@
       return panel;
     }
 
-    function updateLayout() {
-      videoGrid.className = 'video-grid';
-      if (participantCount === 2) {
-        videoGrid.classList.add('two-users');
-      } else if (participantCount === 3) {
-        videoGrid.classList.add('three-users');
-      } else if (participantCount >= 4) {
-        videoGrid.classList.add('four-plus-users');
+    function createScreenPanel(socket_id, user_id) {
+      const screenPanelId = `screen_${socket_id}`;
+      if (document.getElementById(screenPanelId)) return null;
+      const panel = document.createElement('div');
+      panel.className = 'user-panel';
+      panel.id = screenPanelId;
+      const screenLabel = document.createElement('div');
+      screenLabel.className = 'label';
+      screenLabel.textContent = `${user_id}'s Screen`;
+      panel.appendChild(screenLabel);
+      const screenVideo = document.createElement('video');
+      screenVideo.id = `screen_video_${socket_id}`;
+      screenVideo.autoplay = true;
+      screenVideo.setAttribute('playsinline', '');
+      panel.appendChild(screenVideo);
+      videoGrid.appendChild(panel);
+      return { panel, video: screenVideo };
+    }
+
+    function createPeerConnection(socket_id, user_id) {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      console.log(`Adding tracks for ${socket_id}:`, localStream.getTracks());
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      if (screenStream) {
+        console.log(`Adding screen stream tracks for ${socket_id}:`, screenStream.getTracks());
+        screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
       }
+
+      pc.ontrack = (event) => {
+        console.log(`ontrack event for ${socket_id}:`, event.track.kind, event.streams[0]);
+        const stream = event.streams[0];
+        const track = event.track;
+        let panelData = userPanels.get(socket_id);
+        if (!panelData) {
+          const panel = createUserPanel(socket_id, user_id);
+          panelData = { panel, cameraVideo: null, screenVideo: null, isSharing: false, user_id };
+          userPanels.set(socket_id, panelData);
+          participantCount++;
+          updateGridLayout();
+        }
+
+        if (track.kind === 'video') {
+          if (!panelData.cameraVideo) {
+            panelData.cameraVideo = document.createElement('video');
+            panelData.cameraVideo.id = `camera_${socket_id}`;
+            panelData.cameraVideo.autoplay = true;
+            panelData.cameraVideo.setAttribute('playsinline', '');
+            panelData.panel.appendChild(panelData.cameraVideo);
+            pc.cameraStream = stream; // Store camera stream in pc
+            panelData.cameraVideo.srcObject = stream;
+            console.log(`Assigned camera stream to ${socket_id}`);
+          } else {
+            const peer = peers.get(socket_id);
+            if (peer && stream !== peer.cameraStream && !panelData.screenVideo) {
+              const screenData = createScreenPanel(socket_id, panelData.user_id);
+              if (screenData) {
+                panelData.screenVideo = screenData.video;
+                panelData.screenVideo.srcObject = stream;
+                console.log(`Assigned screen stream to ${socket_id}'s screen panel`);
+                panelData.screenVideo.play().catch(err => console.error(`Play error for ${socket_id}:`, err));
+                participantCount++;
+                updateGridLayout();
+              }
+            }
+          }
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log(`ICE candidate for ${socket_id}:`, event.candidate);
+          socket.emit('ice_candidate', { candidate: event.candidate, to: socket_id });
+        }
+      };
+
+      pc.onnegotiationneeded = async () => {
+        console.log(`Negotiation needed for ${socket_id}`);
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', { offer, to: socket_id });
+        } catch (err) {
+          console.error(`Negotiation error for ${socket_id}:`, err);
+        }
+      };
+
+      peers.set(socket_id, pc); // Store pc in peers map
+      return pc;
     }
 
     socket.on('user_joined', async ({ user_id, socket_id }) => {
       if (socket_id === socket.id) return;
+      console.log(`User joined: ${user_id}, socket_id: ${socket_id}`);
       const pc = createPeerConnection(socket_id, user_id);
       pc.user_id = user_id;
       const offer = await pc.createOffer();
@@ -409,6 +386,7 @@
     });
 
     socket.on('offer', async ({ offer, from }) => {
+      console.log(`Received offer from ${from}`);
       const pc = createPeerConnection(from, peers.get(from)?.user_id || `User_${from}`);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
@@ -417,16 +395,19 @@
     });
 
     socket.on('answer', ({ answer, from }) => {
+      console.log(`Received answer from ${from}`);
       const pc = peers.get(from);
       pc.setRemoteDescription(new RTCSessionDescription(answer));
     });
 
     socket.on('ice_candidate', ({ candidate, from }) => {
+      console.log(`Received ICE candidate from ${from}`);
       const pc = peers.get(from);
-      pc.addIceCandidate(new RTCIceCandidate(candidate));
+      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error(`ICE error for ${from}:`, err));
     });
 
     socket.on('user_left', ({ socket_id }) => {
+      console.log(`User left: ${socket_id}`);
       const pc = peers.get(socket_id);
       if (pc) {
         pc.close();
@@ -434,45 +415,56 @@
         const panelData = userPanels.get(socket_id);
         if (panelData) {
           panelData.panel.remove();
+          if (panelData.screenVideo) {
+            const screenPanelId = `screen_${socket_id}`;
+            const screenPanel = document.getElementById(screenPanelId);
+            if (screenPanel) screenPanel.remove();
+            participantCount--;
+          }
           userPanels.delete(socket_id);
           participantCount--;
-          updateLayout();
+          updateGridLayout();
         }
       }
     });
 
     socket.on('screen_sharing', ({ socket_id, isSharing, user_id }) => {
+      console.log(`Screen sharing update for ${socket_id}: isSharing=${isSharing}, user_id=${user_id}`);
       const panelData = userPanels.get(socket_id);
       if (socket_id === socket.id) {
-        screenShare.style.display = isSharing ? 'block' : 'none';
-        if (isSharing && screenStream) {
-          localScreen.srcObject = screenStream;
-        } else {
-          localScreen.srcObject = null;
+        if (isSharing && !screenStream) {
+          shareScreen(user_id);
+        } else if (!isSharing && screenStream) {
+          stopScreenShare();
         }
       } else if (panelData) {
         panelData.isSharing = isSharing;
         if (isSharing && !panelData.screenVideo) {
-          // Add screen video only if not already present
-          panelData.screenVideo = document.createElement('video');
-          panelData.screenVideo.id = `screen_${socket_id}`;
-          panelData.screenVideo.autoplay = true;
-          const label = document.createElement('div');
-          label.className = 'label';
-          label.textContent = 'Screen';
-          panelData.panel.appendChild(label);
-          panelData.panel.appendChild(panelData.screenVideo);
-          // Re-trigger ontrack to ensure screen stream is assigned
-          peers.get(socket_id).getReceivers().forEach(receiver => {
-            if (receiver.track.kind === 'video' && receiver.track !== pc.cameraStream?.getVideoTracks()[0]) {
-              panelData.screenVideo.srcObject = new MediaStream([receiver.track]);
+          const pc = peers.get(socket_id); // Retrieve pc from peers map
+          if (pc) {
+            const screenData = createScreenPanel(socket_id, panelData.user_id);
+            if (screenData) {
+              panelData.screenVideo = screenData.video;
+              // Assign the screen stream from receivers
+              pc.getReceivers().forEach(receiver => {
+                if (receiver.track.kind === 'video' && (!pc.cameraStream || receiver.track !== pc.cameraStream.getVideoTracks()[0])) {
+                  console.log(`Assigning screen stream from receiver for ${socket_id}`);
+                  panelData.screenVideo.srcObject = new MediaStream([receiver.track]);
+                  panelData.screenVideo.play().catch(err => console.error(`Play error for screen ${socket_id}:`, err));
+                }
+              });
+              participantCount++;
+              updateGridLayout();
             }
-          });
+          }
         } else if (!isSharing && panelData.screenVideo) {
-          const label = panelData.screenVideo.previousElementSibling;
-          if (label && label.textContent === 'Screen') label.remove();
           panelData.screenVideo.remove();
           panelData.screenVideo = null;
+          const screenPanelId = `screen_${socket_id}`;
+          const screenPanel = document.getElementById(screenPanelId);
+          if (screenPanel) screenPanel.remove();
+          participantCount--;
+          updateGridLayout();
         }
       }
     });
@@ -495,24 +487,59 @@
       localStream.getAudioTracks()[0].enabled = !enabled;
     }
 
-    async function shareScreen() {
-      if (!screenStream) {
+    async function shareScreen(user_id) {
+      try {
         screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        localScreen.srcObject = screenStream;
-        screenShare.style.display = 'block';
-        screenStream.getVideoTracks()[0].onended = () => {
-          screenStream = null;
-          socket.emit('screen_sharing', { isSharing: false });
-          screenShare.style.display = 'none';
-          localScreen.srcObject = null;
-          peers.forEach(pc => pc.getSenders().forEach(sender => {
+        console.log(`Screen stream acquired:`, screenStream.getTracks());
+        const screenData = createScreenPanel(socket.id, user_id);
+        if (screenData) {
+          screenData.video.srcObject = screenStream;
+          screenData.video.play().catch(err => console.error(`Local screen play error:`, err));
+        }
+        socket.emit('screen_sharing', { isSharing: true, user_id });
+        participantCount++;
+        updateGridLayout();
+        screenStream.getVideoTracks()[0].onended = stopScreenShare;
+        peers.forEach((pc, peerId) => {
+          console.log(`Adding screen track to peer ${peerId}`);
+          screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+        });
+        peers.forEach(async (pc, peerId) => {
+          if (pc.signalingState !== 'stable') return;
+          console.log(`Renegotiating with ${peerId}`);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', { offer, to: peerId });
+        });
+      } catch (err) {
+        console.error(`Error sharing screen:`, err);
+      }
+    }
+
+    function stopScreenShare() {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+        const screenPanelId = `screen_${socket.id}`;
+        const screenPanel = document.getElementById(screenPanelId);
+        if (screenPanel) screenPanel.remove();
+        socket.emit('screen_sharing', { isSharing: false });
+        peers.forEach((pc, peerId) => {
+          pc.getSenders().forEach(sender => {
             if (sender.track && sender.track.kind === 'video' && !localStream.getVideoTracks().includes(sender.track)) {
+              console.log(`Removing screen track from ${peerId}`);
               pc.removeTrack(sender);
             }
-          }));
-        };
-        socket.emit('screen_sharing', { isSharing: true });
-        peers.forEach(pc => screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream)));
+          });
+        });
+        peers.forEach(async (pc, peerId) => {
+          if (pc.signalingState !== 'stable') return;
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit('offer', { offer, to: peerId });
+        });
+        participantCount--;
+        updateGridLayout();
       }
     }
 
@@ -539,12 +566,15 @@
       peers.forEach(pc => pc.close());
       peers.clear();
       userPanels.forEach(data => data.panel.remove());
+      const screenPanelId = `screen_${socket.id}`;
+      const screenPanel = document.getElementById(screenPanelId);
+      if (screenPanel) screenPanel.remove();
       userPanels.clear();
       socket.disconnect();
       window.location.reload();
     }
 
-    window.onload = joinCall;
+    window.onload = startMedia;
   </script>
 </body>
 </html>
