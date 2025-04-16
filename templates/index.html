@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Interviewer</title>
+  <link rel="icon" href="/static/favicon.ico">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div id="video-grid"></div>
+    <div id="chat-panel" class="hidden">
+      <div id="chat-messages"></div>
+      <input type="text" id="chat-message" placeholder="Type a message...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+    <div class="controls">
+      <button onclick="toggleVideo()">Toggle Video</button>
+      <button onclick="toggleAudio()">Toggle Audio</button>
+      <button onclick="shareScreen()">Share Screen</button>
+      <button onclick="toggleAudioRecording()">Toggle Recording</button>
+      <button onclick="toggleChat()">Toggle Chat</button>
+      <button onclick="leaveCall()">Leave Call</button>
+    </div>
+  </div>
+  <script src="/static/js/script.js"></script>
+</body>
+</html>
